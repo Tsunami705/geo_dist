@@ -5,8 +5,8 @@ set(CMAKE_CONFIGURATION_TYPES "Release;Debug" CACHE STRING "Release;Debug")
 
 project(pc_error)
 
-# --- PCL ---
-find_package(PCL 1.8 REQUIRED COMPONENTS common octree io search features)
+# --- PCL (explicit components) ---
+find_package(PCL 1.8 REQUIRED COMPONENTS common io octree search features)
 
 # --- OpenMP (optional) ---
 find_package(OpenMP)
@@ -16,14 +16,16 @@ if (OPENMP_FOUND)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
-# --- Threads (needed on many Boost/PCL builds) ---
+# --- Threads (pthread) ---
 find_package(Threads REQUIRED)
 
-# --- Boost program_options (REQUIRED) ---
+# --- Boost: request all pieces we might need explicitly ---
 set(Boost_USE_STATIC_LIBS        OFF)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME     OFF)
-find_package(Boost 1.61.0 REQUIRED COMPONENTS program_options)
+find_package(Boost 1.61.0 REQUIRED
+  COMPONENTS program_options filesystem system iostreams
+)
 
 include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/./"
@@ -33,39 +35,31 @@ include_directories(
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-# C++11
+# C++11 (CMake 2.8 style)
 set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -std=c++11")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 # Sources
 file(GLOB_RECURSE PROJ_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/*.h*)
 file(GLOB SOURCE               ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+list(REMOVE_ITEM SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/stdafx.cpp")
 
-message(STATUS "PCL_LIBRARIES=${PCL_LIBRARIES}")
-message(STATUS "Boost_LIBRARIES=${Boost_LIBRARIES}")
-message(STATUS "Boost_PROGRAM_OPTIONS_LIBRARY=${Boost_PROGRAM_OPTIONS_LIBRARY}")
+add_executable(pc_error ${SOURCE})
 
-# Target
-if (MSVC)
-  message(STATUS "TO BE TESTED")
-  add_executable(pc_error ${SOURCE})
-else()
-  list(REMOVE_ITEM SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/stdafx.cpp")
-  add_executable(pc_error ${SOURCE})
-endif()
-
-# --- Link everything explicitly ---
-# 1) Always link the PCL libs for requested components
-# 2) Link program_options explicitly via both ${Boost_LIBRARIES} AND the per-component var
-# 3) Link pthreads explicitly (Threads::Threads)
+# --- Link explicitly: PCL IO + COMMON, then the rest, then Boost components, then pthread ---
+# Some PCL 1.8 exports don't propagate IO/Common properly via PCL_LIBRARIES, so be explicit first.
 target_link_libraries(pc_error
+  ${PCL_IO_LIBRARIES}
+  ${PCL_COMMON_LIBRARIES}
   ${PCL_LIBRARIES}
-  ${Boost_LIBRARIES}
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
+  ${Boost_FILESYSTEM_LIBRARY}
+  ${Boost_SYSTEM_LIBRARY}
+  ${Boost_IOSTREAMS_LIBRARY}
   Threads::Threads
 )
 
-# --- Optional: some PCL 1.8 builds split IO into extra libs; link them if present ---
+# Optional: conda’s PCL 1.8 may split extra IO libs; add them if they exist.
 find_library(PCL_IO_PLY_LIB pcl_io_ply HINTS ${PCL_LIBRARY_DIRS})
 find_library(PCL_IO_PCD_LIB pcl_io_pcd HINTS ${PCL_LIBRARY_DIRS})
 if (PCL_IO_PLY_LIB)
@@ -77,9 +71,20 @@ if (PCL_IO_PCD_LIB)
   target_link_libraries(pc_error ${PCL_IO_PCD_LIB})
 endif()
 
+# Output / install
 install(TARGETS pc_error DESTINATION ".")
 set_target_properties(pc_error PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_RELEASE ${PROJECT_OUTPUT_FOLDER}
   RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${PROJECT_OUTPUT_FOLDER}
   DEBUG_POSTFIX "_d"
 )
+
+# Debug prints so we can see exactly what CMake resolved
+message(STATUS "PCL_LIBRARIES               = ${PCL_LIBRARIES}")
+message(STATUS "PCL_IO_LIBRARIES            = ${PCL_IO_LIBRARIES}")
+message(STATUS "PCL_COMMON_LIBRARIES        = ${PCL_COMMON_LIBRARIES}")
+message(STATUS "Boost_LIBRARIES             = ${Boost_LIBRARIES}")
+message(STATUS "Boost_PROGRAM_OPTIONS_LIB   = ${Boost_PROGRAM_OPTIONS_LIBRARY}")
+message(STATUS "Boost_FILESYSTEM_LIB        = ${Boost_FILESYSTEM_LIBRARY}")
+message(STATUS "Boost_SYSTEM_LIB            = ${Boost_SYSTEM_LIBRARY}")
+message(STATUS "Boost_IOSTREAMS_LIB         = ${Boost_IOSTREAMS_LIBRARY}")
