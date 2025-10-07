@@ -5,6 +5,8 @@ set(CMAKE_CONFIGURATION_TYPES "Release;Debug" CACHE STRING "Release;Debug")
 
 project(pc_error)
 
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+
 # --- PCL (explicit components) ---
 find_package(PCL 1.8 REQUIRED COMPONENTS common io octree search features)
 
@@ -33,7 +35,7 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
 )
 link_directories(${PCL_LIBRARY_DIRS})
-add_definitions(${PCL_DEFINITIONS})
+
 
 # C++11 (CMake 2.8 style)
 set (CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -std=c++11")
